@@ -1,12 +1,12 @@
 # Personalización del sitio
 
-- **Tema activo:** Astra (versión 4.14.0).
-- **Por qué lo elegí:** Es uno de los temas más populares, rápidos y ligeros para WordPress (con más de un millón de instalaciones activas). Destaca por su alta velocidad de carga, su diseño limpio y moderno, su compatibilidad completa con el editor de bloques y su flexibilidad para personalizar colores corporativos, tipografía y diseño de cabecera sin requerir código adicional.
+- **Tema activo:** GeneratePress (versión 3.6.1).
+- **Por qué lo elegí:** Es uno de los temas más rápidos, ligeros y estables para WordPress. Ocupa menos de 10 KB, no añade dependencias pesadas, ni plugins obligatorios ni contenido de relleno no deseado, transformando limpiamente el aspecto visual, la cabecera y la tipografía del sitio respetando al 100 % los estándares de accesibilidad y el editor de bloques nativo.
 - **Plugin instalado:** WPForms Lite (versión 2.0.2.2, actualizado recientemente, más de 6 millones de instalaciones activas y valoración de 4.9/5 estrellas).
 - **Por qué lo necesito:** Proporciona un sistema seguro y visual para construir formularios de contacto interactivos y accesibles en la página «Contacto». Evita publicar direcciones de correo electrónico en texto plano (previniendo el spam) y facilita la comunicación directa de los visitantes con los administradores del sitio.
 - **Estructura de contenidos:**
   - **Páginas:**
-    - «Inicio» (establecida como portada estática en *Ajustes → Lectura*).
+    - «Inicio» (establecida como portada estática en *Ajustes → Lectura*, con bloques para «Novedades», «Tutoriales» y «Galería de medios»).
     - «Sobre el proyecto» (página informativa general).
     - «Tecnologías» (página hija con jerarquía bajo «Sobre el proyecto»).
     - «Contacto» (página de comunicación con formulario de contacto).
@@ -39,4 +39,4 @@
   - `memory_limit = 256M`
 - **Evidencias gráficas:**
   - Captura antes del cambio de tema: `docs/captura-antes-tema.png` (tema inicial Twenty Twenty-Three).
-  - Captura tras el cambio de tema: `docs/captura-despues-tema.png` (tema activo Astra personalizado).
+  - Captura tras el cambio de tema: `docs/captura-despues-tema.png` (tema activo GeneratePress personalizado).
