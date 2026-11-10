@@ -1,2 +1,6 @@
 .env
 capturas/
+backups/
+exportaciones/
+logs/
+informes/
