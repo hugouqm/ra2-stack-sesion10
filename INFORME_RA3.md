@@ -118,3 +118,4 @@ Para cumplir con el requerimiento de un usuario que revise y publique contenidos
   ./wp plugin delete akismet hello
   ```
   *Justificación:* Los plugins inactivos conservan su código fuente en el sistema de archivos (`wp-content/plugins/`). Si contienen vulnerabilidades sin parchear, pueden ser invocados directamente mediante peticiones HTTP específicas sin pasar por el núcleo de WordPress. La eliminación completa es una buena práctica de hardening.
+
