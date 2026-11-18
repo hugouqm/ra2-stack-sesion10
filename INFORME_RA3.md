@@ -119,3 +119,60 @@ Para cumplir con el requerimiento de un usuario que revise y publique contenidos
   ```
   *Justificación:* Los plugins inactivos conservan su código fuente en el sistema de archivos (`wp-content/plugins/`). Si contienen vulnerabilidades sin parchear, pueden ser invocados directamente mediante peticiones HTTP específicas sin pasar por el núcleo de WordPress. La eliminación completa es una buena práctica de hardening.
 
+
+
+---
+
+## 💾 Sección 3 · Copias de seguridad automatizadas y prueba de restauración (Práctica 2 · CE d)
+
+### 3.1. Estrategia de copias de seguridad del stack
+Para garantizar la continuidad del servicio y poder reconstruir el sitio web en cualquier equipo con Docker sin arrastrar archivos innecesarios ni duplicar el núcleo:
+- **Base de datos (`db_data`):** Se realiza un volcado lógico con `mariadb-dump --single-transaction --no-tablespaces` comprimido al vuelo en `backups/db_AAAAMMDD-HHMMSS.sql.gz`. Contiene todas las tablas relacionales (usuarios, páginas, entradas, opciones, mensajes de Flamingo y auditoría de Simple History).
+- **Archivos dinámicos (`wp_data`):** Se empaqueta exclusivamente el directorio `wp-content/` en `backups/wp-content_AAAAMMDD-HHMMSS.tar.gz`. El núcleo de WordPress (`wp-admin`, `wp-includes`) no se copia porque ya viene provisto por la imagen oficial del contenedor Docker.
+- **Rotación:** El script conserva únicamente las últimas 7 copias (`$CONSERVAR=7`), purgando automáticamente las copias obsoletas para no saturar el espacio en disco.
+
+---
+
+### 3.2. Prueba de desastre controlado y restauración
+Para verificar que las copias son realmente recuperables, se ejecutó una simulación de desastre:
+
+1. **Copia previa al desastre:**
+   ```bash
+   ./scripts/backup.sh
+   # Generó backups/db_20261118-170720.sql.gz y backups/wp-content_20261118-170720.tar.gz
+   ```
+
+2. **Provocación del desastre:**
+   - **Borrado forzado de entrada:** Se eliminó la entrada ID 54 (*«Configuración de VLANs y direccionamiento»*) omitiendo la papelera:
+     ```bash
+     ./wp post delete 54 --force
+     ```
+   - **Eliminación de plugin crítico:** Se eliminó por completo el plugin `flamingo`:
+     ```bash
+     ./wp plugin delete flamingo
+     ```
+   - **Comprobación:** La entrada desapareció del listado de posts y el plugin Flamingo dejó de estar disponible en el panel.
+
+3. **Ejecución de la restauración:**
+   - Se ejecutó el script de recuperación indicando la marca temporal de la copia y confirmando la acción:
+     ```bash
+     ./scripts/restore.sh 20261118-170720
+     ```
+   - El script volcó el fichero SQL en MariaDB, reemplazó el directorio `wp-content` y reasignó la propiedad al usuario `www-data:www-data`.
+
+4. **Verificación post-restauración:**
+   - La entrada ID 54 reapareció en `./wp post list` con todo su contenido intacto.
+   - El plugin `flamingo` reapareció activo en `./wp plugin list`.
+   - Se comprobó en la base de datos que el mensaje de contacto recibido en la práctica anterior (*«Consulta matricula ASIR»*) se restauró íntegramente.
+
+---
+
+### 3.3. Automatización de copias en el aula
+En el entorno Linux del aula se programa la ejecución automática mediante el demonio `cron`:
+```bash
+# Editar tareas programadas
+crontab -e
+
+# Línea añadida (ejecución martes y miércoles al terminar la clase a las 13:30):
+30 13 * * 2,3 cd $HOME/iaw && ./scripts/backup.sh >> backups/backup.log 2>&1
+```
