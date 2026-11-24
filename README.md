@@ -139,3 +139,39 @@ WORDPRESS_CONFIG_EXTRA: |
 - **Síntoma:** Al acceder a una entrada por su URL amigable (ej. `/lanzamiento-del-nuevo-portal-web/`), el navegador devuelve error `404 Not Found` de NGINX.
 - **Causa:** Ausencia de la directiva `try_files $uri $uri/ /index.php?$args;` en la regla `location /` de NGINX, haciendo que el servidor busque un fichero físico en el disco en lugar de redirigir la petición al front controller `index.php` de WordPress.
 - **Solución:** Configurar en `nginx/default.conf` la cláusula `try_files` dentro del bloque `location /` y reiniciar o recargar el contenedor NGINX (`docker compose exec nginx nginx -s reload`).
+
+
+---
+
+## 💾 8. Copias de Seguridad y Restauración (RA3)
+
+El proyecto incluye un sistema automatizado y versionado para la realización y restauración de copias de seguridad en la carpeta `scripts/`:
+
+### 8.1. Realizar una copia de seguridad
+Para crear una copia en caliente de la base de datos y de los ficheros del sitio, ejecuta:
+```bash
+./scripts/backup.sh
+```
+- **¿Qué genera?:** Dos ficheros comprimidos en la carpeta `backups/` con la misma marca de tiempo (`AAAAMMDD-HHMMSS`):
+  - `db_AAAAMMDD-HHMMSS.sql.gz`: Volcado SQL de la base de datos MariaDB generado con `mariadb-dump`.
+  - `wp-content_AAAAMMDD-HHMMSS.tar.gz`: Archivo comprimido con los plugins, temas y medios subidos.
+- **Rotación:** El script conserva automáticamente únicamente las últimas **7 copias** para no saturar el almacenamiento.
+- **Seguridad:** La carpeta `backups/` está excluida del repositorio mediante `.gitignore` para no subir datos sensibles a GitHub.
+
+### 8.2. Restaurar una copia de seguridad
+1. Consulta las copias disponibles ejecutando el script sin argumentos:
+   ```bash
+   ./scripts/restore.sh
+   ```
+2. Restaura una copia concreta indicando su marca de tiempo (se solicitará confirmación escribiendo `SI`):
+   ```bash
+   ./scripts/restore.sh 20261118-170720
+   ```
+El script sobrescribirá la base de datos con el volcado y repondrá el contenido de `wp-content` asignando los permisos adecuados a `www-data`.
+
+### 8.3. Automatización con Cron (Equipo del aula)
+En entornos Linux, se puede programar la ejecución periódica mediante `crontab -e`:
+```bash
+# Copia automática al finalizar la clase los martes y miércoles a las 13:30:
+30 13 * * 2,3 cd $HOME/iaw && ./scripts/backup.sh >> backups/backup.log 2>&1
+```
