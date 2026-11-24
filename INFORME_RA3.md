@@ -210,13 +210,28 @@ mkdir -p exportaciones
 ---
 
 ### 4.3. Importación de contenidos y usuarios (Pasos 3 y 4)
-- **Plugin importador oficial:** Se instaló y activó `wordpress-importer` mediante WP-CLI.
+- **Plugin importador oficial:** Se instaló y activó `wordpress-importer` mediante WP-CLI (`./wp plugin install wordpress-importer --activate`).
 - **Importación de contenidos WXR (`contenidos_asir.xml`):**
+  - Comando ejecutado: `./wp import /datos/contenidos_asir.xml --authors=create`.
   - La directiva `--authors=create` analiza los autores definidos en el XML; si un autor ya existe (ej. `coord.web`), le reasigna las entradas automáticamente, y si no existe, crea el usuario correspondiente.
+  - Resultado: Se importaron 6 entradas temáticas (en categorías *Noticias*, *Eventos*, *Prácticas*) y 2 páginas estáticas («Horario del ciclo» y «Normas del aula técnica»).
 - **Importación de usuarios vía CSV (`usuarios.csv`):**
   - Se utiliza el comando `./wp user import-csv /datos/usuarios.csv`.
-  - **Actualización vs duplicación:** Si el usuario ya existe en WordPress (como `coord.web` o `profe.redes`), WP-CLI actualiza sus metadatos (nombre, apellidos, correo) sin duplicar la cuenta ni modificar sus contraseñas.
+  - **Actualización vs duplicación:** Si el usuario ya existe en WordPress (como `coord.web`, `profe.redes`, `alumna.fct`, `familia.garcia`), WP-CLI actualiza sus metadatos (`updated`) sin duplicar la cuenta ni modificar sus contraseñas. Los nuevos usuarios (`profe.bd`, `alumno.fct`, `exalumno.2025`) se crean (`created`).
   - **Seguridad en el CSV:** El archivo CSV **nunca incluye contraseñas** en texto plano. WordPress genera automáticamente una contraseña aleatoria y segura para cada usuario nuevo importado.
+- **Verificación en el CMS:**
+  ```text
+  ID  post_type  post_title
+  101 post       Jornada de puertas abiertas del ciclo ASIR
+  102 post       Charla: contenedores en producción
+  103 post       Nuevo armario de comunicaciones en el aula
+  104 post       Práctica: el stack de WordPress en contenedores
+  105 post       Empresas colaboradoras para la formación en empresa
+  106 post       Hackathon de ciberseguridad
+  107 page       Horario del ciclo
+  108 page       Normas del aula técnica
+  ```
+  Total de usuarios tras la importación: 11 usuarios registrados en el sistema.
 
 ---
 
