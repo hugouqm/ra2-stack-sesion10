@@ -176,3 +176,84 @@ crontab -e
 # Línea añadida (ejecución martes y miércoles al terminar la clase a las 13:30):
 30 13 * * 2,3 cd $HOME/iaw && ./scripts/backup.sh >> backups/backup.log 2>&1
 ```
+
+
+---
+
+## 📦 Sección 4 · Importar y exportar contenidos en distintos formatos (Práctica 3 · CE e)
+
+### 4.1. Análisis de los cuatro formatos y sus casos de uso
+| Formato | ¿Qué contiene? | Caso de uso principal | Ventajas y limitaciones |
+|---|---|---|---|
+| **WXR (WordPress eXtended RSS / XML)** | Entradas, páginas, categorías, etiquetas, autores, menús, comentarios y metadatos. | Mover contenidos entre distintas instalaciones de WordPress. | **Ventaja:** Independiente de la base de datos o prefijos de tabla. **Limitación:** Solo sirve entre CMS WordPress; no incluye plugins ni configuración general del servidor. |
+| **CSV (Comma-Separated Values)** | Estructura tabular plana con cabecera y una fila por cada registro. | Importar o exportar usuarios y listados masivos desde hojas de cálculo. | **Ventaja:** Compatible con Excel, Calc y scripts de automatización. **Limitación:** No puede representar estructuras jerárquicas complejas o metadatos anidados sin serialización. |
+| **JSON (REST API / WP-CLI)** | Datos estructurados en pares clave-valor estándar. | Interoperabilidad e integración con aplicaciones externas, apps móviles o frontend desacoplado (*headless*). | **Ventaja:** Estándar web universal, ligero y legible por máquinas y navegadores. **Limitación:** Mayor tamaño relativo que un volcado binario. |
+| **SQL** | Instrucciones DDL/DML (`CREATE TABLE`, `INSERT INTO`) de la base de datos completa o tablas concretas. | Copias de seguridad completas (DRP) y migraciones de servidor idéntico. | **Ventaja:** Copia exacta al 100 % del estado del gestor. **Limitación:** Alto riesgo si se filtra (incluye credenciales y hashes) y dependencia del motor MariaDB/MySQL. |
+
+---
+
+### 4.2. Exportación del sitio en formato WXR (Paso 2)
+Se generó el archivo de exportación WXR completo mediante WP-CLI sin necesidad de interactuar manualmente con la interfaz gráfica:
+```bash
+mkdir -p exportaciones
+./wp export --stdout > exportaciones/sitio_$(date +%Y%m%d).xml
+```
+- **Conteo de elementos exportados:** `31` bloques `<item>` detectados.
+- **Desglose por tipo de contenido (`wp:post_type`):**
+  - `page`: 6 páginas (Inicio, Sobre el proyecto, Tecnologías, Contacto, Política de cookies, etc.).
+  - `post`: 5 entradas de noticias y novedades.
+  - `attachment`: 3 imágenes y medios adjuntos.
+  - `nav_menu_item` / `wp_navigation`: 5 elementos de menú de navegación.
+  - `wpcf7_contact_form`: 1 formulario de contacto Contact Form 7.
+  - `flamingo_inbound` / `flamingo_contact`: 9 registros de mensajes y contactos guardados.
+
+---
+
+### 4.3. Importación de contenidos y usuarios (Pasos 3 y 4)
+- **Plugin importador oficial:** Se instaló y activó `wordpress-importer` mediante WP-CLI.
+- **Importación de contenidos WXR (`contenidos_asir.xml`):**
+  - La directiva `--authors=create` analiza los autores definidos en el XML; si un autor ya existe (ej. `coord.web`), le reasigna las entradas automáticamente, y si no existe, crea el usuario correspondiente.
+- **Importación de usuarios vía CSV (`usuarios.csv`):**
+  - Se utiliza el comando `./wp user import-csv /datos/usuarios.csv`.
+  - **Actualización vs duplicación:** Si el usuario ya existe en WordPress (como `coord.web` o `profe.redes`), WP-CLI actualiza sus metadatos (nombre, apellidos, correo) sin duplicar la cuenta ni modificar sus contraseñas.
+  - **Seguridad en el CSV:** El archivo CSV **nunca incluye contraseñas** en texto plano. WordPress genera automáticamente una contraseña aleatoria y segura para cada usuario nuevo importado.
+
+---
+
+### 4.4. Exportación en listados planos (CSV) y estructurados (JSON) (Paso 5)
+Se generaron listados selectivos usando el modificador universal `--format`:
+```bash
+# Exportar listado de entradas a CSV
+./wp post list --post_type=post --fields=ID,post_title,post_date,post_status --format=csv > exportaciones/entradas.csv
+
+# Exportar listado de usuarios a JSON
+./wp user list --fields=user_login,user_email,roles --format=json > exportaciones/usuarios.json
+```
+Ambos ficheros son inmediatamente legibles por herramientas de ofimática (LibreOffice Calc con codificación UTF-8 y delimitador coma) y sistemas de procesamiento de datos en JSON.
+
+---
+
+### 4.5. Consumo de la API REST nativa de WordPress (Paso 6)
+WordPress expone públicamente sus puntos finales de lectura bajo el espacio de nombres `/wp-json/wp/v2/`:
+```bash
+# Consultar las tres últimas entradas públicas
+curl -s "http://localhost:8080/wp-json/wp/v2/posts?per_page=3&_fields=id,title,link"
+
+# Consultar los autores públicos del sitio
+curl -s "http://localhost:8080/wp-json/wp/v2/users?_fields=id,name"
+```
+- **¿Por qué funciona sin autenticación?:** Los artículos publicados y los nombres de sus autores son información pública por naturaleza en la web. La API REST permite que lectores RSS, aplicaciones móviles o sitios externos consuman estos datos sin credenciales.
+
+---
+
+### 4.6. Seguridad: exportación SQL y análisis de riesgos (Paso 7)
+Se exportó de forma aislada la tabla de usuarios del CMS:
+```bash
+docker compose exec -T db sh -c 'exec mariadb-dump --no-tablespaces -u"$WP_DB_USER" -p"$WP_DB_PASSWORD" "$WP_DB_NAME" wp_users' > exportaciones/wp_users.sql
+```
+- **Hashes detectados en el volcado:**
+  Al inspeccionar el fichero se comprueba que las contraseñas están protegidas mediante funciones criptográficas de un solo sentido (bcrypt, prefijo `$wp$2y$10$...` o phpass `$P$...`).
+- **Riesgo asociado:**
+  Aunque las contraseñas no se almacenan en texto plano, un atacante que consiga acceso al archivo `.sql` puede realizar ataques de fuerza bruta offline o ataques por diccionario con herramientas como *Hashcat* sin ser detectado por el cortafuegos ni por el plugin `limit-login-attempts`.
+- **Medida preventiva:**
+  Las carpetas `backups/` y `exportaciones/` están **estrictamente ignoradas en `.gitignore`** para asegurar que ningún archivo con volcados SQL, datos personales de usuarios o mensajes de formularios se suba jamás al repositorio público en GitHub.
