@@ -272,3 +272,101 @@ docker compose exec -T db sh -c 'exec mariadb-dump --no-tablespaces -u"$WP_DB_US
   Aunque las contraseñas no se almacenan en texto plano, un atacante que consiga acceso al archivo `.sql` puede realizar ataques de fuerza bruta offline o ataques por diccionario con herramientas como *Hashcat* sin ser detectado por el cortafuegos ni por el plugin `limit-login-attempts`.
 - **Medida preventiva:**
   Las carpetas `backups/` y `exportaciones/` están **estrictamente ignoradas en `.gitignore`** para asegurar que ningún archivo con volcados SQL, datos personales de usuarios o mensajes de formularios se suba jamás al repositorio público en GitHub.
+
+---
+
+## 🎨 Sección 5 · Plantillas, temas hijo y edición del sitio (FSE) (Práctica 4 · CE f)
+
+### 5.1. Conceptos clave de la edición completa del sitio (FSE)
+| Concepto | Definición técnica | Implementación en Twenty Twenty-Five / IAW Hijo |
+|---|---|---|
+| **Tema** | Conjunto completo de estilos, plantillas y lógica visual del CMS. | `Twenty Twenty-Five` (tema padre) y `iaw-hijo` (tema hijo). |
+| **Plantilla (`wp_template`)** | Estructura que define cómo se muestra un tipo específico de contenido. | `single` (entradas individuales), `page` (páginas), `wp-custom-template-pagina-informativa` (plantilla personalizada). |
+| **Parte de plantilla (`wp_template_part`)** | Componente modular y reutilizable incrustado en varias plantillas. | `header` (cabecera), `footer` (pie de página). |
+| **Patrón** | Composición prediseñada de bloques que puede insertarse y modificarse en contenidos o plantillas. | Patrones integrados de Twenty Twenty-Five para navegación y comentarios. |
+| **Estilos globales (`theme.json`)** | Definición jerárquica de variables CSS, colores, tipografías y espaciados sin tocar PHP ni CSS manual. | Configuración en `temas/iaw-hijo/theme.json` con paleta corporativa ASIR (fondo `#F4F7FA`, texto `#21295C`, enlaces `#065A82`). |
+
+---
+
+### 5.2. Creación del tema hijo `iaw-hijo`
+Se generó el tema hijo utilizando WP-CLI:
+```bash
+./wp scaffold child-theme iaw-hijo --parent_theme=twentytwentyfive --theme_name="IAW Hijo" --activate
+```
+- **Estructura del tema hijo:**
+  - `style.css`: Cabecera declarativa indicando `Template: twentytwentyfive`.
+  - `functions.php`: Encolado de estilos del padre e hijo y filtro de red para peticiones locales.
+  - `theme.json`: Herencia y sobreescritura de estilos globales (colores de fondo, textos, títulos y enlaces).
+- **Ubicación y versionado:**
+  - El tema queda versionado en el repositorio en la carpeta `temas/iaw-hijo/` y sincronizado en el volumen de WordPress en `/var/www/html/wp-content/themes/iaw-hijo/`.
+
+---
+
+### 5.3. Modificación de plantillas y partes de plantilla
+1. **Plantilla de entradas individuales (`single`):**
+   - Se incorporó bajo el título el bloque de autor (`core/post-author`) y el bloque de taxonomías/categorías (`core/post-terms` para `category`).
+2. **Parte de plantilla de pie de página (`footer`):**
+   - Se sustituyó el texto genérico por: `Ciclo ASIR · Implantación de Aplicaciones Web · 2026`.
+   - Se añadió el bloque de iconos sociales con el icono RSS enlazando al canal `/feed/`.
+3. **Plantilla personalizada («Página informativa»):**
+   - Creada como `wp-custom-template-pagina-informativa`. Contiene cabecera, título y contenido a ancho amplio sin barras laterales ni comentarios, cerrando con el pie.
+   - Asignada a la página *«Horario del ciclo»* (ID 107).
+
+---
+
+### 5.4. Persistencia: ¿Dónde se guardan las personalizaciones?
+Al consultar con WP-CLI las entradas especiales:
+```bash
+./wp post list --post_type=wp_template,wp_template_part --fields=ID,post_name,post_type,post_modified
+```
+- **Salida obtenida:**
+  ```text
+  ID   post_name                              post_type         post_modified
+  113  single                                 wp_template       2026-11-24 16:14:07
+  114  footer                                 wp_template_part  2026-11-24 16:14:07
+  115  wp-custom-template-pagina-informativa  wp_template       2026-11-24 16:14:07
+  ```
+- **Conclusión técnica fundamental:**
+  - Las ediciones visuales realizadas en el editor del sitio **NO modifican los ficheros físicos del tema** (en `wp-content/themes/iaw-hijo/` solo permanecen `style.css`, `functions.php` y `theme.json`).
+  - Las plantillas modificadas se guardan en la **base de datos MariaDB** (`wp_posts` con `post_type=wp_template` o `wp_template_part`).
+  - **Consecuencia para la administración de sistemas:** El script de copia de seguridad de la base de datos (`./scripts/backup.sh`) preserva intacto todo el diseño y las plantillas creadas.
+
+---
+
+## 📡 Sección 6 · Sindicación de contenidos (RSS y Atom) (Práctica 4 · CE g)
+
+### 6.1. Comparativa técnica entre RSS 2.0 y Atom 1.0 (con ejemplos reales del sitio)
+A partir de la inspección de los canales `http://localhost:8080/feed/` y `http://localhost:8080/feed/atom/`:
+
+| Característica | RSS 2.0 | Atom 1.0 | Ejemplo real extraído de nuestro sitio |
+|---|---|---|---|
+| **Elemento raíz** | `<rss version="2.0"><channel>` | `<feed xmlns="http://www.w3.org/2005/Atom">` | RSS abre con `<rss version="2.0">`, Atom con `<feed>`. |
+| **Elemento por entrada** | `<item>` | `<entry>` | `<item>` engloba cada post en RSS; `<entry>` en Atom. |
+| **Formato de fecha** | `<pubDate>` (RFC 822 / RFC 2822) | `<updated>` / `<published>` (ISO 8601) | RSS: `Tue, 10 Nov 2026 15:30:25 +0000`<br>Atom: `2026-11-10T15:30:25Z` |
+| **Identificador unívoco** | `<guid>` (opcional) | `<id>` (obligatorio) | RSS: `<guid isPermaLink="false">http://localhost:8080/?p=54</guid>`<br>Atom: `<id>http://localhost:8080/?p=54</id>` |
+| **Organismo / Estándar** | Especificación Harvard / RSS Advisory Board | RFC 4287 (IETF) | Atom es un estándar formal de Internet más estricto con espacios de nombres XML. |
+
+---
+
+### 6.2. Configuración y optimización de los canales
+Se ajustaron los parámetros de publicación mediante WP-CLI:
+```bash
+./wp option set posts_per_rss 5
+./wp option set rss_use_excerpt 1
+```
+- **Verificación:**
+  - Elementos emitidos en el feed general: `5` entradas (`curl -s http://localhost:8080/feed/ | grep -c '<item>'` devuelve `5`).
+  - Bloques de contenido completo: `0` bloques `content:encoded` (`grep -c 'content:encoded'` devuelve `0`).
+- **Justificación técnica:** Publicar únicamente el extracto (`excerpt`) reduce el consumo de ancho de banda del servidor web, previene el raspado automático de contenido íntegro y fomenta las visitas al portal para leer el artículo completo.
+
+---
+
+### 6.3. Sindicación como productor y como consumidor
+1. **Integración como productor (Emisión de contenidos):**
+   - Icono RSS en el pie del sitio enlazando a `/feed/`.
+   - Enlace directo en el menú de navegación para la suscripción temática a eventos: `/category/eventos/feed/`.
+2. **Integración como consumidor (Agregación externa y cruzada):**
+   - Se publicó la página `/noticias-del-sector/` con dos bloques RSS activos:
+     1. **Canal oficial de noticias:** `https://wordpress.org/news/feed/` (5 noticias con fecha y extracto).
+     2. **Canal cruzado de red/aula:** `http://10.249.96.38:8080/feed/` (sindicación de entradas entre puestos del aula mediante IP de red local, habilitada a través del filtro `http_request_host_is_external` en `functions.php`).
+
