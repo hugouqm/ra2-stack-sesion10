@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
-# Atajo para usar WP-CLI con el stack del proyecto
+# ./wp — atajo para usar WP-CLI con el stack del proyecto (RA3)
+export MSYS_NO_PATHCONV=1
 exec docker compose run --rm -T wpcli wp "$@"
 
