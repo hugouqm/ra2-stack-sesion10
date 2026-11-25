@@ -1,2 +1,7 @@
 .env
 capturas/
+backups/
+exportaciones/
+logs/
+informes/
+wp.cmd
