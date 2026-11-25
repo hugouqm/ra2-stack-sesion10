@@ -1,8 +1,8 @@
-# INFORME RA3 · Práctica 1: Usuarios, perfiles y módulos
+# INFORME RA3 · Administración de gestores de contenidos
 
 **Módulo:** Implantación de Aplicaciones Web (0376)  
 **Curso:** 2º ASIR  
-**Resultados de Aprendizaje y Criterios:** RA3 (CE a, b, c)  
+**Resultados de Aprendizaje y Criterios:** RA3 (CE a–i)  
 **Rama de trabajo:** `ra3-admin`  
 
 ---
@@ -119,8 +119,6 @@ Para cumplir con el requerimiento de un usuario que revise y publique contenidos
   ```
   *Justificación:* Los plugins inactivos conservan su código fuente en el sistema de archivos (`wp-content/plugins/`). Si contienen vulnerabilidades sin parchear, pueden ser invocados directamente mediante peticiones HTTP específicas sin pasar por el núcleo de WordPress. La eliminación completa es una buena práctica de hardening.
 
-
-
 ---
 
 ## 💾 Sección 3 · Copias de seguridad automatizadas y prueba de restauración (Práctica 2 · CE d)
@@ -176,7 +174,6 @@ crontab -e
 # Línea añadida (ejecución martes y miércoles al terminar la clase a las 13:30):
 30 13 * * 2,3 cd $HOME/iaw && ./scripts/backup.sh >> backups/backup.log 2>&1
 ```
-
 
 ---
 
@@ -370,3 +367,87 @@ Se ajustaron los parámetros de publicación mediante WP-CLI:
      1. **Canal oficial de noticias:** `https://wordpress.org/news/feed/` (5 noticias con fecha y extracto).
      2. **Canal cruzado de red/aula:** `http://10.249.96.38:8080/feed/` (sindicación de entradas entre puestos del aula mediante IP de red local, habilitada a través del filtro `http_request_host_is_external` en `functions.php`).
 
+---
+
+## 🔄 Sección 7 · Actualizaciones controladas por capas (Práctica 5 · CE h)
+
+### 7.1. Protocolo de actualización reversible
+Para actualizar el stack sin comprometer la disponibilidad ni perder datos, se siguió un procedimiento ordenado en 6 pasos:
+1. **Inventario inicial:** Consulta de versiones exactas antes de modificar ningún componente.
+2. **Copia de seguridad y aislamiento en Git:** Ejecución de `./scripts/backup.sh` (generando `backups/db_20261125-181838.sql.gz` y `backups/wp-content_20261125-181838.tar.gz`) y creación de la rama `ra3-actualizacion` (`git switch -c ra3-actualizacion`).
+3. **Capa 1 — Plugins:** Comprobación en seco (`./wp plugin update --all --dry-run`), actualización de los 4 plugins con versión nueva (`./wp plugin update --all`) y verificación funcional del formulario de Contacto y su registro en Flamingo.
+4. **Capa 2 — Imagen de contenedor (PHP 8.1 $\rightarrow$ 8.4):** Modificación en `docker-compose.yml` de `wordpress:6.3-php8.1-fpm` a `wordpress:7.1-php8.4-fpm` y de `wordpress:cli-php8.3` a `wordpress:cli-php8.4`, descarga con `docker compose pull wordpress` y recreación con `docker compose up -d`.
+5. **Capa 3 — Núcleo de WordPress:** Comprobación de actualizaciones menores (`./wp core check-update`, `./wp core update --minor`), actualización de esquema de base de datos (`./wp core update-db`) y auditoría de integridad (`./wp core verify-checksums`).
+6. **Verificación y consolidación:** Revisión del frontend, formulario, panel, `/feed/` y `logs/error.log`. Tras confirmar el correcto funcionamiento, commit (`3a97390`) y fusión (*merge*) hacia `ra3-admin`. *(En caso de error, se revierte infraestructura con `git restore docker-compose.yml && docker compose up -d` y datos con `./scripts/restore.sh 20261125-181838`).*
+
+---
+
+### 7.2. ¿Por qué cambiar la imagen Docker (PHP 8.4) no actualiza el núcleo de WordPress?
+La imagen oficial de WordPress en Docker únicamente copia los archivos del núcleo al volumen persistente (`/var/www/html`) durante el primer arranque, **cuando dicho volumen está vacío**.
+
+Cuando se recrea el contenedor reutilizando un **volumen existente**, el *entrypoint* de la imagen respeta los archivos ya instalados para no sobrescribir configuraciones ni ficheros del sitio. Por este motivo, actualizar la etiqueta de la imagen actualiza el motor **PHP (`8.1.25` $\rightarrow$ `8.4.28`)** y sus extensiones, pero el núcleo de WordPress permanece en la versión almacenada en el volumen (`7.1.5`) hasta que se actualiza explícitamente con WP-CLI (`./wp core update`) y se migra la base de datos (`./wp core update-db`).
+
+---
+
+### 7.3. Inventario de versiones: Antes y Después
+
+| Capa / Tipo | Componente | Versión antes | Versión después | Estado / Observaciones |
+|---|---|---|---|---|
+| **Imagen Docker** | `nginx` | `nginx:stable` | `nginx:stable` | Sin cambios |
+| **Imagen Docker** | `mariadb` | `mariadb:11` | `mariadb:11` | Sin cambios |
+| **Imagen Docker** | `wordpress` | `wordpress:6.3-php8.1-fpm` | `wordpress:7.1-php8.4-fpm` | Etiqueta actualizada en `docker-compose.yml` |
+| **Imagen Docker** | `wpcli` | `wordpress:cli-php8.3` | `wordpress:cli-php8.4` | Etiqueta actualizada en `docker-compose.yml` |
+| **Intérprete** | PHP (CLI / FPM) | `8.1.25` | `8.4.28` | Actualizado tras recrear el contenedor |
+| **Núcleo CMS** | WordPress Core | `7.1.5` (DB `61833`) | `7.1.5` (DB `61833`) | Última versión menor; *checksums* verificados |
+| **Plugin** | `contact-form-7` | `5.9.8` | `6.2.6` | Actualizado; formulario + Flamingo verificados |
+| **Plugin** | `cookie-notice` | `3.1.20` | `3.1.21` | Actualizado |
+| **Plugin** | `flamingo` | `2.6.4` | `2.6.4` | Ya estaba en última versión |
+| **Plugin** | `limit-login-attempts-reloaded` | `3.4.6` | `3.4.7` | Actualizado; registra los 3 fallos de login |
+| **Plugin** | `simple-history` | `5.36.0` | `5.36.0` | Ya estaba en última versión |
+| **Plugin** | `wordpress-importer` | `0.9.7` | `0.9.7` | Ya estaba en última versión |
+| **Plugin** | `wpforms-lite` | `2.0.5.1` | `2.0.5.2` | Actualizado |
+| **Tema (Activo)** | `iaw-hijo` | `0.1.0` | `0.1.0` | Tema hijo activo |
+| **Tema (Padre)** | `twentytwentyfive` | `1.5` | `1.5` | Tema padre de `iaw-hijo` |
+| **Tema (Inactivo)** | `astra` | `4.14.1` | `4.14.1` (`4.14.3` disp.) | Tema inactivo |
+| **Tema (Inactivo)** | `generatepress` | `3.6.1` | `3.6.1` | Tema inactivo |
+| **Temas por defecto** | `twentytwentyfour` / `23` / `22` / `21` | `1.6` / `1.7` / `2.2` / `2.9` | `1.6` / `1.7` / `2.2` / `2.9` | Temas inactivos sin cambios |
+
+---
+
+## 📊 Sección 8 · Informes de acceso y auditoría de registros (Práctica 5 · CE i)
+
+### 8.1. Estructura del log de acceso de Nginx (`logs/access.log`)
+Nginx registra cada petición HTTP siguiendo el formato `main` (*Combined Log Format*) definido en `/etc/nginx/nginx.conf`:
+
+| Campo | Ejemplo | Significado |
+|---|---|---|
+| `$remote_addr` | `10.249.96.38` / `172.18.0.1` | Dirección IP origen que realiza la petición. |
+| `[$time_local]` | `[25/Nov/2026:18:37:01 +0100]` | Fecha, hora local y desplazamiento horario. |
+| `"$request"` | `"POST /wp-login.php HTTP/1.1"` | Método HTTP (`GET`, `POST`), URI solicitada y protocolo. |
+| `$status` | `200`, `301`, `302`, `404` | Código de estado HTTP devuelto al cliente. |
+| `$body_bytes_sent` | `5321` | Bytes enviados en el cuerpo de la respuesta. |
+| `"$http_referer"` | `"http://10.249.96.38:8080/wp-login.php"` | URL de referencia desde la que llega la petición. |
+| `"$http_user_agent"` | `"Mozilla/5.0 ..."` / `"curl/8.5.0"` | Agente de usuario (navegador o herramienta CLI). |
+| `"$http_x_forwarded_for"` | `"-"` | IP real del cliente cuando existe un proxy inverso delante. |
+
+- **Diagnóstico de autenticación en el log HTTP:** Una petición `POST /wp-login.php` con estado **`200`** corresponde a un **intento fallido** (se vuelve a servir el formulario de login), mientras que un estado **`302`** corresponde a un **acceso correcto** (redirección al panel `/wp-admin/`).
+
+---
+
+### 8.2. Script de análisis e informe HTML (`scripts/informe-accesos.sh`)
+Se implementó `./scripts/informe-accesos.sh` para procesar `logs/access.log` mediante dos mecanismos complementarios:
+1. **Resumen en terminal (`awk`, `sort`, `uniq`, `grep`):** Calcula el total de peticiones, IPs distintas, desglose por código HTTP (`200`, `301`, `302`, `404`), las 10 URLs más solicitadas y el recuento e IPs origen de los intentos `POST /wp-login.php`.
+2. **Informe visual con GoAccess:** Ejecuta un contenedor efímero `allinurl/goaccess` sobre `logs/access.log` en modo lectura (`--log-format=COMBINED`) generando un panel HTML navegable en `informes/accesos_AAAAMMDD-HHMM.html`.
+
+---
+
+### 8.3. Comparativa: Registro de Nginx vs. Simple History
+
+| Aspecto | Registro de Nginx (`logs/access.log`) | Simple History (WordPress) |
+|---|---|---|
+| **Capa de registro** | Capa de red / servidor web (HTTP). | Capa de aplicación (eventos internos del CMS). |
+| **Información clave** | IP origen, método HTTP, ruta solicitada, código de estado (`200`, `404`, `302`) y *User-Agent*. | Nombre de usuario exacto de WordPress, acciones realizadas (edición, plugins actualizados con versión antigua/nueva) e intentos fallidos. |
+| **Detección de incidentes** | Permite detectar escaneos de rutas inexistentes (`404`), picos de tráfico y ataques de fuerza bruta por volumen sobre `/wp-login.php`. | Identifica qué usuario concreto se intentó vulnerar (complementado por *Limit Login Attempts Reloaded*, que registró los 3 intentos fallidos) y audita cambios internos. |
+| **Limitación** | Desconoce qué usuario autenticado de WordPress realizó cada petición. | No registra tráfico a recursos estáticos ni errores `404` que no ejecuten eventos internos de WordPress. |
+
+**Conclusión:** Un informe de accesos y seguridad completo requiere combinar **ambas fuentes**, cruzando la trazabilidad de red/HTTP de Nginx con la auditoría de identidad y cambios internos de Simple History.
